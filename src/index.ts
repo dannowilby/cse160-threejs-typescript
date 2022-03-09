@@ -11,39 +11,50 @@ camera.position.z = 2
 
 const renderer = new THREE.WebGLRenderer()
 renderer.setSize(window.innerWidth, window.innerHeight)
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
 document.body.appendChild(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 
 const loader = new THREE.TextureLoader();
 
-const geometry = new THREE.TetrahedronGeometry(0.5);
-const material = new THREE.MeshBasicMaterial({
-  map: loader.load('block.png')
-});
-const cube = new THREE.Mesh(geometry, material)
-cube.position.y = 4.25;
-scene.add(cube)
+let cube: THREE.Mesh;
+function createAnimatedObject() {
+  const geometry = new THREE.TetrahedronGeometry(0.5);
+  const material = new THREE.MeshBasicMaterial({
+    map: loader.load('block.png')
+  });
+  cube = new THREE.Mesh(geometry, material)
+  cube.position.y = 4.25;
+  scene.add(cube);
+}
 
 // Obj taken from:
 // https://maxparata.itch.io/voxel-ancient-environment
-const objLoader = new OBJLoader();
-objLoader.load('AncientTemple.obj', (root) => {
-  const material = new THREE.MeshBasicMaterial({
-    map: loader.load('AncientTemple.png'),
-  });
-  root.traverse(node => {
-     if (node instanceof THREE.Mesh) {
-       node.material = material;
-     }
-   })
-    
-  root.position.y -= 0.5;
+function createObj() {
+  const objLoader = new OBJLoader();
+  objLoader.load('AncientTemple.obj', (root) => {
+    const material = new THREE.MeshPhongMaterial({
+      map: loader.load('AncientTemple.png'),
+    });
+    root.traverse(node => {
+       if (node instanceof THREE.Mesh) {
+        node.material = material;
+        node.castShadow = true;
+        node.receiveShadow = true;
+       }
+     })
+      
+    root.position.y -= 0.5;
 
-  scene.add(root);
- });
+    root.castShadow = true;
+    root.receiveShadow = true;
+    scene.add(root);
+   });
+}
 
-function createScene() {
+function createPrimitiveObjects() {
 
   const shapeCount = 21;
   
@@ -58,21 +69,21 @@ function createScene() {
     // add cube
     if(shapeType == 0) {
       const geometry = new THREE.BoxGeometry()
-      const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+      const material = new THREE.MeshPhongMaterial( { color: 0xffff00 } );
       shape = new THREE.Mesh( geometry, material );
     }
 
     // add cylinder
     if(shapeType == 1) {
       const geometry = new THREE.CylinderGeometry( 0.25, 0.25, 1, 32 );
-      const material = new THREE.MeshBasicMaterial( { color: 0x00ffff } );
+      const material = new THREE.MeshPhongMaterial( { color: 0x00ffff } );
       shape = new THREE.Mesh( geometry, material );
     }
 
     // add other shape
     if(shapeType == 2) {
       const geometry = new THREE.IcosahedronGeometry( 0.5 );
-      const material = new THREE.MeshBasicMaterial( { color: 0xff00ff } );
+      const material = new THREE.MeshPhongMaterial( { color: 0xff00ff } );
       shape = new THREE.Mesh( geometry, material );
     }
 
@@ -81,12 +92,13 @@ function createScene() {
 
     shape.position.x = radius * Math.sin(angle);
     shape.position.z = radius * Math.cos(angle);
+    shape.castShadow = true;
+    shape.receiveShadow = true;
 
     scene.add( shape );
   }
 
 }
-createScene();
 
 // skybox from
 // https://opengameart.org/content/skiingpenguins-skybox-pack
@@ -112,28 +124,98 @@ function createSkybox() {
   let skybox = new THREE.Mesh( skyboxGeo, materialArray );
   scene.add( skybox ); 
 }
-createSkybox();
 
-window.addEventListener('resize', onWindowResize, false)
+function createLighting() {
+
+  // point light
+  const light = new THREE.PointLight( 0xffffff, 2, 100 );
+  light.position.set( 3, 3, 3 );
+  scene.add( light );
+  light.castShadow = true;
+  const helper = new THREE.CameraHelper( light.shadow.camera );
+  scene.add( helper );
+
+  const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    wireframe: true
+  });
+  const lightBox = new THREE.Mesh(geometry, material)
+  lightBox.position.set( 3, 3, 3 );
+  scene.add(lightBox);
+
+
+  // ambient light
+  const ambientLight = new THREE.AmbientLight( 0x404040 ); // soft white light
+  scene.add( ambientLight );
+
+  // spot light
+  const spotLight = new THREE.SpotLight( 0xffffff );
+  spotLight.position.set( -4, 3, -4 );
+
+  spotLight.castShadow = true;
+
+  spotLight.shadow.mapSize.width = 1024;
+  spotLight.shadow.mapSize.height = 1024;
+
+  spotLight.shadow.camera.near = 500;
+  spotLight.shadow.camera.far = 4000;
+  spotLight.shadow.camera.fov = 30;
+
+  const lightTarget = new THREE.Object3D();
+  lightTarget.position.set( -5, 0, -5 );
+  scene.add( lightTarget );
+  spotLight.target = lightTarget;
+
+  const helper1 = new THREE.CameraHelper( spotLight.shadow.camera );
+  scene.add( helper1 );
+  scene.add( spotLight );
+
+  const lightBox1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), material)
+  lightBox1.position.set( -4, 3, -4 );
+  scene.add(lightBox1);
+}
+
+function createGroundPlane() {
+  const geometry = new THREE.PlaneGeometry( 100, 100 );
+  geometry.rotateX(- Math.PI / 2);
+  geometry.translate( 0, -0.5, 0 );
+  const material = new THREE.MeshPhongMaterial( {color: 0xffffff, } );
+  const plane = new THREE.Mesh( geometry, material );
+  plane.receiveShadow = true;
+  scene.add( plane );
+}
+
+function createScene() {
+
+  createPrimitiveObjects();
+  createAnimatedObject();
+  createObj();
+  createSkybox();
+  createLighting();
+  createGroundPlane();
+
+}
+
+window.addEventListener('resize', onWindowResize, false);
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight
-    camera.updateProjectionMatrix()
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    render()
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() {
-    requestAnimationFrame(animate)
+    requestAnimationFrame(animate);
 
-    cube.rotation.x += 0.01
-    cube.rotation.y += 0.01
+    if(cube) {
+      cube.rotation.x += 0.01;
+      cube.rotation.y += 0.01;
+    }
 
-    controls.update()
+    controls.update();
 
-    render()
-}
-
-function render() {
     renderer.render(scene, camera)
 }
-animate()
+
+createScene();
+animate();
