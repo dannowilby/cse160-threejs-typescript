@@ -20,6 +20,7 @@ const controls = new OrbitControls(camera, renderer.domElement)
 const loader = new THREE.TextureLoader();
 
 let cube: THREE.Mesh;
+let billboard: THREE.Sprite;
 function createAnimatedObject() {
   const geometry = new THREE.TetrahedronGeometry(0.5);
   const material = new THREE.MeshBasicMaterial({
@@ -27,7 +28,17 @@ function createAnimatedObject() {
   });
   cube = new THREE.Mesh(geometry, material)
   cube.position.y = 4.25;
-  scene.add(cube);
+  scene.add( cube );
+
+  const labelMaterial = new THREE.SpriteMaterial({
+    map: loader.load('sun-circle.png'),
+    transparent: true,
+  });
+  billboard = new THREE.Sprite(labelMaterial);
+
+  billboard.position.y = 4.25;
+  scene.add( billboard );
+
 }
 
 // Obj taken from:
@@ -197,12 +208,48 @@ function createScene() {
 
 }
 
-window.addEventListener('resize', onWindowResize, false);
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+function pick(event: MouseEvent) {
+
+  // update the picking ray with the camera and pointer position
+	raycaster.setFromCamera( pointer, camera );
+
+	// calculate objects intersecting the picking ray
+	const intersects = raycaster.intersectObjects( scene.children, false );
+
+  for ( let i = 0; i < intersects.length; i ++ ) {
+    const j = intersects[i].object;
+
+    if(j instanceof THREE.Mesh) {
+      j.material.wireframe = (!j.material.wireframe);
+      return;
+    }
+
+  }
+
+}
+document.addEventListener('click', pick);
+
+function onPointerMove(event: MouseEvent) {
+
+	// calculate pointer position in normalized device coordinates
+	// (-1 to +1) for both components
+
+	pointer.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+	pointer.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+}
+window.addEventListener( 'pointermove', onPointerMove );
+
+
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
+window.addEventListener('resize', onWindowResize, false);
 
 function animate() {
     requestAnimationFrame(animate);
@@ -210,6 +257,10 @@ function animate() {
     if(cube) {
       cube.rotation.x += 0.01;
       cube.rotation.y += 0.01;
+    }
+
+    if(billboard) {
+      billboard.material.rotation += 0.01;
     }
 
     controls.update();
